@@ -34,7 +34,7 @@ export default function Sidebar() {
   const location = useLocation();
 
   return (
-    <aside className="w-64 bg-gradient-to-b from-eco-dark-900 to-eco-dark-800 border-r border-eco-green-800/30 min-h-screen flex flex-col">
+    <aside className="w-64 bg-gradient-to-b from-eco-dark-900 to-eco-dark-800 border-r border-eco-green-800/30 h-screen fixed left-0 top-16 flex flex-col overflow-y-auto">
       {/* Navigation Items */}
       <nav className="flex-1 py-6">
         <div className="space-y-1 px-3">

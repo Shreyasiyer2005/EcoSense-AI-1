@@ -7,23 +7,25 @@ import LocationAnalysis from './pages/LocationAnalysis';
 function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-gray-50 flex flex-col">
+      <div className="min-h-screen bg-gray-50">
         <TopNav />
-        <div className="flex flex-1">
+        <div className="flex">
           <Sidebar />
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/analyze" element={<LocationAnalysis />} />
-            <Route path="/land-cover" element={<PlaceholderPage title="Land Cover Analysis" />} />
-            <Route path="/vegetation" element={<PlaceholderPage title="Vegetation Change" />} />
-            <Route path="/stress" element={<PlaceholderPage title="Environmental Stress" />} />
-            <Route path="/ai-assistant" element={<PlaceholderPage title="AI Assistant" />} />
-            <Route path="/reports" element={<PlaceholderPage title="Reports" />} />
-            <Route path="/saved" element={<PlaceholderPage title="Saved Analyses" />} />
-            <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
-            <Route path="/about" element={<AboutPage />} />
-            <Route path="/explore" element={<PlaceholderPage title="Explore" />} />
-          </Routes>
+          <main className="flex-1 pt-16">
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/analyze" element={<LocationAnalysis />} />
+              <Route path="/land-cover" element={<PlaceholderPage title="Land Cover Analysis" />} />
+              <Route path="/vegetation" element={<PlaceholderPage title="Vegetation Change" />} />
+              <Route path="/stress" element={<PlaceholderPage title="Environmental Stress" />} />
+              <Route path="/ai-assistant" element={<PlaceholderPage title="AI Assistant" />} />
+              <Route path="/reports" element={<PlaceholderPage title="Reports" />} />
+              <Route path="/saved" element={<PlaceholderPage title="Saved Analyses" />} />
+              <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
+              <Route path="/about" element={<AboutPage />} />
+              <Route path="/explore" element={<PlaceholderPage title="Explore" />} />
+            </Routes>
+          </main>
         </div>
       </div>
     </BrowserRouter>
@@ -32,7 +34,7 @@ function App() {
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
-    <div className="flex-1 flex items-center justify-center p-8">
+    <div className="ml-64 flex items-center justify-center p-8 min-h-screen">
       <div className="text-center">
         <h2 className="text-3xl font-bold text-gray-800 mb-4">{title}</h2>
         <p className="text-gray-600 mb-6">
@@ -48,7 +50,7 @@ function PlaceholderPage({ title }: { title: string }) {
 
 function AboutPage() {
   return (
-    <div className="flex-1 overflow-y-auto p-8">
+    <div className="ml-64 overflow-y-auto p-8 min-h-screen">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-4xl font-bold text-gray-800 mb-6">About EcoSense AI</h1>
         <div className="bg-white rounded-xl shadow-lg p-8 space-y-6">

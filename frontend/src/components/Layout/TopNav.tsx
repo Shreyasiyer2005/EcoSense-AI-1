@@ -3,8 +3,8 @@ import { Bell, User } from 'lucide-react';
 
 export default function TopNav() {
   return (
-    <nav className="bg-gradient-to-r from-eco-dark-900 via-eco-dark-800 to-eco-dark-900 border-b border-eco-green-800/30 sticky top-0 z-50">
-      <div className="container mx-auto px-6">
+    <nav className="bg-gradient-to-r from-eco-dark-900 via-eco-dark-800 to-eco-dark-900 border-b border-eco-green-800/30 fixed top-0 left-0 right-0 z-50 h-16">
+      <div className="h-full px-6">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-3">
