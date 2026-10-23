@@ -35,7 +35,31 @@ class ApiService {
     return response.data;
   }
 
-  // Phase 2 and beyond: Add location, analysis, and other API methods here
+  // Location API methods
+  async resolveLocation(type: string, value: any, country: string = 'IN') {
+    const response = await this.backendClient.post('/api/v1/locations/resolve', {
+      type,
+      value,
+      country
+    });
+    return response.data;
+  }
+
+  async validateCoordinates(lat: number, lon: number) {
+    const response = await this.backendClient.get('/api/v1/locations/validate/coordinates', {
+      params: { lat, lon }
+    });
+    return response.data;
+  }
+
+  async getLocationSuggestions(query: string, country: string = 'IN') {
+    const response = await this.backendClient.get('/api/v1/locations/suggestions', {
+      params: { q: query, country }
+    });
+    return response.data;
+  }
+
+  // Phase 2 and beyond: Add analysis and other API methods here
 }
 
 const apiService = new ApiService();

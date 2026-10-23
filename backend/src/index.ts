@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import healthRouter from './routes/health';
+import locationsRouter from './routes/locations';
 
 // Load environment variables
 dotenv.config();
@@ -24,13 +25,16 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/health', healthRouter);
-app.use('/api/v1', (req, res) => {
+app.use('/api/v1/locations', locationsRouter);
+
+app.get('/api/v1', (req, res) => {
   res.json({ 
     message: 'EcoSense AI API v1',
     status: 'ready',
+    version: '1.0.0-phase2',
     endpoints: {
       health: '/health',
-      locations: '/api/v1/locations (Phase 2)',
+      locations: '/api/v1/locations',
       analyses: '/api/v1/analyses (Phase 4)',
     }
   });

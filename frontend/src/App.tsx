@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { BrowserRouter, Routes, Route, Link } from 'react-router-dom'
 import apiService from './services/api'
+import LocationAnalysis from './pages/LocationAnalysis'
 
 interface HealthStatus {
   backend: {
@@ -51,6 +53,17 @@ function App() {
   };
 
   return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<HomePage health={health} checkHealth={checkHealth} />} />
+        <Route path="/location-analysis" element={<LocationAnalysis />} />
+      </Routes>
+    </BrowserRouter>
+  )
+}
+
+function HomePage({ health, checkHealth }: { health: HealthStatus, checkHealth: () => void }) {
+  return (
     <div className="min-h-screen bg-eco-dark-900 text-eco-dark-100">
       {/* Header */}
       <header className="bg-eco-dark-800 border-b border-eco-green-700">
@@ -68,7 +81,7 @@ function App() {
               </div>
             </div>
             <div className="text-sm text-eco-dark-400">
-              Phase 1: Foundation
+              Phase 1: Foundation | <Link to="/location-analysis" className="text-eco-green-500 hover:text-eco-green-400">Phase 2: Location Analysis →</Link>
             </div>
           </div>
         </div>
@@ -154,6 +167,23 @@ function App() {
             </button>
           </div>
 
+          {/* Phase Navigation */}
+          <div className="mt-8 bg-eco-dark-800 rounded-lg p-6 border border-eco-dark-700">
+            <h3 className="text-lg font-semibold mb-4 text-eco-green-500">Phase 2: Location Analysis</h3>
+            <p className="text-eco-dark-300 mb-4">
+              New location input system with real geocoding integration is now available!
+            </p>
+            <Link
+              to="/location-analysis"
+              className="inline-flex items-center px-6 py-3 bg-eco-green-600 hover:bg-eco-green-700 text-white font-medium rounded-lg transition-colors"
+            >
+              Try Location Analysis
+              <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+              </svg>
+            </Link>
+          </div>
+
           {/* Phase 1 Info */}
           <div className="mt-8 bg-eco-dark-800 rounded-lg p-6 border border-eco-dark-700">
             <h3 className="text-lg font-semibold mb-4 text-eco-green-500">Phase 1: Foundation Complete</h3>
@@ -191,7 +221,7 @@ function App() {
         </div>
       </footer>
     </div>
-  )
+  );
 }
 
 export default App
