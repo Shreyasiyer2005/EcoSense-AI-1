@@ -26,7 +26,7 @@ build/
 target/
 
 # IDE and editor files
-.vscode/
+# .vscode/  # Included: TypeScript workspace configuration needed
 .idea/
 *.swp
 *.swo
