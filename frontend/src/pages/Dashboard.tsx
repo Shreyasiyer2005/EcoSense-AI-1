@@ -73,30 +73,29 @@ export default function Dashboard() {
     ? [selectedLocation.latitude, selectedLocation.longitude]
     : [12.3375, 75.7380]; // Default to Coorg
 
+  const mapZoom = selectedLocation ? 13 : 10;
+
   return (
     <div className="ml-64">
       {/* Hero Section with Forest Background */}
       <div 
-        className="relative bg-cover bg-center min-h-[500px] flex items-center"
+        className="relative bg-cover bg-center h-[400px] flex items-center"
         style={{
-          backgroundImage: `linear-gradient(rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.8)), url('https://images.unsplash.com/photo-1441974231531-c6227db76b6e?q=80&w=2560&auto=format&fit=crop')`,
+          backgroundImage: `linear-gradient(rgba(15, 23, 42, 0.75), rgba(22, 101, 52, 0.6)), url('https://images.unsplash.com/photo-1441974231531-c6227db76b6e?q=80&w=2560&auto=format&fit=crop')`,
           backgroundPosition: 'center 40%'
         }}
       >
-        <div className="w-full flex flex-col items-center justify-center text-center px-6 py-12">
-          <h1 className="text-4xl md:text-5xl font-bold text-white mb-3">
-            Understand Your Environment.
+        <div className="w-full flex flex-col items-center justify-center text-center px-6 py-8">
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-2">
+            Monitor Environmental Change
           </h1>
-          <h2 className="text-3xl md:text-4xl font-bold text-eco-green-400 mb-4">
-            Protect What Matters.
-          </h2>
-          <p className="text-lg md:text-xl text-eco-dark-200 max-w-3xl mb-6">
-            Analyze land cover, vegetation changes and environmental health using satellite data and AI.
+          <p className="text-lg md:text-xl text-gray-200 max-w-3xl mb-6">
+            Real-time satellite analysis for Western Ghats conservation
           </p>
 
           {/* Location Search Panel */}
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-5 max-w-4xl w-full">
-            <div className="flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-4 mb-4">
+          <div className="bg-white rounded-xl shadow-2xl p-4 max-w-3xl w-full">
+            <div className="flex flex-col sm:flex-row items-center gap-3 mb-3">
               <div className="flex-1 w-full">
                 <div className="relative">
                   <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -113,23 +112,23 @@ export default function Dashboard() {
               <button
                 onClick={handleSearch}
                 disabled={loading}
-                className="w-full sm:w-auto px-8 py-3 bg-eco-green-600 hover:bg-eco-green-700 disabled:bg-gray-400 text-white font-semibold rounded-xl transition-colors shadow-lg whitespace-nowrap"
+                className="w-full sm:w-auto px-6 py-3 bg-eco-green-600 hover:bg-eco-green-700 disabled:bg-gray-400 text-white font-semibold rounded-lg transition-colors whitespace-nowrap"
               >
-                {loading ? 'Searching...' : 'Analyze Area'}
+                {loading ? 'Searching...' : 'Search'}
               </button>
             </div>
 
             {/* Quick Locations */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               {quickLocations.map((loc) => (
                 <button
                   key={loc.name}
                   onClick={() => handleQuickLocation(loc)}
-                  className="flex flex-col items-center p-2 rounded-lg border-2 border-gray-200 hover:border-eco-green-600 hover:bg-eco-green-50 transition-all text-gray-700"
+                  disabled={loading}
+                  className="flex items-center justify-center gap-1 px-3 py-2 rounded-lg border border-gray-300 hover:border-eco-green-600 hover:bg-eco-green-50 transition-all text-gray-700 text-sm disabled:opacity-50"
                 >
-                  <MapPin className="w-5 h-5 text-eco-green-600 mb-1" />
-                  <span className="font-semibold text-xs">{loc.name}</span>
-                  <span className="text-xs text-gray-500">{loc.pin}</span>
+                  <MapPin className="w-4 h-4 text-eco-green-600" />
+                  <span className="font-medium">{loc.name}</span>
                 </button>
               ))}
             </div>
@@ -144,156 +143,234 @@ export default function Dashboard() {
       </div>
 
       {/* Main Content */}
-      <div className="bg-gray-50 px-6 py-8">
+      <div className="bg-gray-50 px-6 py-6">
         <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left Column - Map and Location Info */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Interactive Map */}
-              <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-eco-green-50 to-white">
-                  <h3 className="text-lg font-semibold text-gray-800 flex items-center">
-                    <MapPin className="w-5 h-5 mr-2 text-eco-green-600" />
-                    Selected Area - {selectedLocation?.state || 'Coorg Region'}
-                  </h3>
-                </div>
-                <div className="relative h-[500px]">
-                  <MapContainer
-                    center={mapCenter}
-                    zoom={selectedLocation ? 12 : 10}
-                    style={{ height: '100%', width: '100%' }}
-                    key={`${mapCenter[0]}-${mapCenter[1]}`}
-                    scrollWheelZoom={true}
-                  >
-                    <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-                    {selectedLocation && (
-                      <Marker position={mapCenter}>
-                        <Popup>
-                          <div className="text-sm">
-                            <strong>{selectedLocation.name}</strong>
-                            <br />
-                            {selectedLocation.state}, {selectedLocation.country}
-                          </div>
-                        </Popup>
-                      </Marker>
-                    )}
-                  </MapContainer>
-                </div>
-                <div className="px-6 py-3 bg-gray-50 text-xs text-gray-600">
-                  © OpenStreetMap contributors
-                </div>
-              </div>
-
-              {/* Area Information */}
-              {selectedLocation && (
-                <div className="bg-white rounded-xl shadow-lg p-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                    <Database className="w-5 h-5 mr-2 text-eco-green-600" />
-                    Area Information
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-500">Location</p>
-                      <p className="font-semibold text-gray-800">{selectedLocation.name}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Coordinates</p>
-                      <p className="font-mono text-sm text-gray-800">
-                        {selectedLocation.latitude.toFixed(4)}°N, {selectedLocation.longitude.toFixed(4)}°E
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">State</p>
-                      <p className="font-semibold text-gray-800">{selectedLocation.state || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Country</p>
-                      <p className="font-semibold text-gray-800">{selectedLocation.country || 'N/A'}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Analysis Results Placeholder */}
-              <div className="bg-white rounded-xl shadow-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Analysis Results</h3>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="text-center p-4 bg-gray-50 rounded-lg">
-                    <p className="text-sm text-gray-500 mb-2">NDVI & Vegetation</p>
-                    <p className="text-xs text-gray-400">Available in Phase 4</p>
-                  </div>
-                  <div className="text-center p-4 bg-gray-50 rounded-lg">
-                    <p className="text-sm text-gray-500 mb-2">Land Cover (U-Net)</p>
-                    <p className="text-xs text-gray-400">Available in Phase 5</p>
-                  </div>
-                  <div className="text-center p-4 bg-gray-50 rounded-lg">
-                    <p className="text-sm text-gray-500 mb-2">Environmental Stress</p>
-                    <p className="text-xs text-gray-400">Available in Phase 6</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column - AI Assistant and Insights */}
+          
+          {selectedLocation ? (
+            // Location Selected - Show Analysis Dashboard
             <div className="space-y-6">
-              {/* AI Environmental Assistant */}
-              <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-                <div className="px-6 py-4 bg-gradient-to-r from-eco-green-600 to-eco-green-700 text-white">
-                  <h3 className="text-lg font-semibold flex items-center">
-                    <span className="mr-2">🤖</span>
-                    AI Environmental Assistant
-                  </h3>
-                </div>
-                <div className="p-6 space-y-4">
-                  <p className="text-sm text-gray-600">
-                    Ask questions about vegetation changes, land cover, and conservation in the selected area.
-                  </p>
-                  <div className="space-y-2">
-                    <button className="w-full text-left px-4 py-3 bg-gray-50 hover:bg-eco-green-50 rounded-lg text-sm text-gray-700 transition-colors">
-                      💬 What changes are seen in vegetation?
-                    </button>
-                    <button className="w-full text-left px-4 py-3 bg-gray-50 hover:bg-eco-green-50 rounded-lg text-sm text-gray-700 transition-colors">
-                      💬 Is there deforestation in this area?
-                    </button>
-                    <button className="w-full text-left px-4 py-3 bg-gray-50 hover:bg-eco-green-50 rounded-lg text-sm text-gray-700 transition-colors">
-                      💬 Suggest conservation actions
-                    </button>
+              {/* Location Header */}
+              <div className="bg-white rounded-lg shadow p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-800">{selectedLocation.name}</h2>
+                    <p className="text-gray-600">{selectedLocation.state}, {selectedLocation.country}</p>
+                    <p className="text-sm text-gray-500 font-mono mt-1">
+                      {selectedLocation.latitude.toFixed(4)}°N, {selectedLocation.longitude.toFixed(4)}°E
+                    </p>
                   </div>
-                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-                    AI agent will be available in Phase 6 with LLM integration
-                  </div>
+                  <button
+                    onClick={() => setSelectedLocation(null)}
+                    className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+                  >
+                    Change Location
+                  </button>
                 </div>
               </div>
 
-              {/* Key Insights */}
-              <div className="bg-white rounded-xl shadow-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Key Insights</h3>
-                <div className="space-y-3">
-                  <div className="flex items-start space-x-3">
-                    <div className="w-2 h-2 bg-eco-green-500 rounded-full mt-2"></div>
-                    <p className="text-sm text-gray-700">
-                      Select a location to view vegetation health and environmental indicators
-                    </p>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Left Column - Map */}
+                <div className="lg:col-span-2">
+                  <div className="bg-white rounded-lg shadow overflow-hidden">
+                    <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+                      <h3 className="font-semibold text-gray-800">Location Map</h3>
+                      <p className="text-xs text-gray-600">Standard map tiles • Satellite imagery not yet integrated</p>
+                    </div>
+                    <div className="relative h-[450px]">
+                      <MapContainer
+                        center={mapCenter}
+                        zoom={mapZoom}
+                        style={{ height: '100%', width: '100%' }}
+                        key={`${mapCenter[0]}-${mapCenter[1]}`}
+                        scrollWheelZoom={true}
+                      >
+                        <TileLayer
+                          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        />
+                        <Marker position={mapCenter}>
+                          <Popup>
+                            <div className="text-sm">
+                              <strong>{selectedLocation.name}</strong>
+                              <br />
+                              {selectedLocation.state}, {selectedLocation.country}
+                            </div>
+                          </Popup>
+                        </Marker>
+                      </MapContainer>
+                    </div>
                   </div>
-                  <div className="flex items-start space-x-3">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
-                    <p className="text-sm text-gray-700">
-                      NDVI analysis requires satellite data retrieval (Phase 3)
-                    </p>
+
+                  {/* Environmental Data Cards */}
+                  <div className="grid grid-cols-2 gap-4 mt-6">
+                    <div className="bg-white rounded-lg shadow p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-semibold text-gray-800">NDVI Analysis</h3>
+                        <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
+                      </div>
+                      <div className="text-center py-8">
+                        <div className="text-4xl mb-2">📡</div>
+                        <p className="text-sm text-gray-600">Satellite data required</p>
+                        <p className="text-xs text-gray-500 mt-1">Will be available in Phase 3+</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-semibold text-gray-800">Land Cover</h3>
+                        <div className="w-3 h-3 rounded-full bg-blue-400"></div>
+                      </div>
+                      <div className="text-center py-8">
+                        <div className="text-4xl mb-2">🗺️</div>
+                        <p className="text-sm text-gray-600">U-Net model not trained</p>
+                        <p className="text-xs text-gray-500 mt-1">Will be available in Phase 5</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-semibold text-gray-800">Vegetation Change</h3>
+                        <div className="w-3 h-3 rounded-full bg-green-400"></div>
+                      </div>
+                      <div className="text-center py-8">
+                        <div className="text-4xl mb-2">🌲</div>
+                        <p className="text-sm text-gray-600">Historical data required</p>
+                        <p className="text-xs text-gray-500 mt-1">Will be available in Phase 4</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-semibold text-gray-800">Environmental Risk</h3>
+                        <div className="w-3 h-3 rounded-full bg-red-400"></div>
+                      </div>
+                      <div className="text-center py-8">
+                        <div className="text-4xl mb-2">⚠️</div>
+                        <p className="text-sm text-gray-600">Analysis not available</p>
+                        <p className="text-xs text-gray-500 mt-1">Will be available in Phase 6</p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-start space-x-3">
-                    <div className="w-2 h-2 bg-yellow-500 rounded-full mt-2"></div>
-                    <p className="text-sm text-gray-700">
-                      Land cover classification uses U-Net deep learning (Phase 5)
-                    </p>
+                </div>
+
+                {/* Right Column - AI Assistant & Info */}
+                <div className="space-y-6">
+                  {/* AI Assistant */}
+                  <div className="bg-white rounded-lg shadow overflow-hidden">
+                    <div className="px-4 py-3 bg-gradient-to-r from-eco-green-600 to-eco-green-700 text-white">
+                      <h3 className="font-semibold flex items-center gap-2">
+                        <span>🤖</span>
+                        AI Environmental Assistant
+                      </h3>
+                    </div>
+                    <div className="p-4">
+                      <p className="text-sm text-gray-600 mb-4">
+                        AI-powered insights will analyze vegetation health, detect changes, and suggest conservation actions.
+                      </p>
+                      <div className="space-y-2 mb-4">
+                        <div className="p-3 bg-gray-50 rounded text-sm text-gray-600">
+                          <span className="font-medium">Example:</span> "What vegetation changes occurred in the last 6 months?"
+                        </div>
+                        <div className="p-3 bg-gray-50 rounded text-sm text-gray-600">
+                          <span className="font-medium">Example:</span> "Suggest conservation priorities for this area"
+                        </div>
+                      </div>
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
+                        <strong>Phase 6:</strong> LLM integration planned with Gemini/GPT-4
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Location Info */}
+                  <div className="bg-white rounded-lg shadow p-4">
+                    <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <Database className="w-4 h-4 text-eco-green-600" />
+                      Location Details
+                    </h3>
+                    <div className="space-y-2 text-sm">
+                      <div>
+                        <span className="text-gray-600">Type:</span>
+                        <span className="ml-2 text-gray-800 font-medium">{selectedLocation.type}</span>
+                      </div>
+                      {selectedLocation.importance && (
+                        <div>
+                          <span className="text-gray-600">Importance:</span>
+                          <span className="ml-2 text-gray-800 font-medium">{selectedLocation.importance.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-gray-600">Source:</span>
+                        <span className="ml-2 text-gray-800 font-medium capitalize">{selectedLocation.source}</span>
+                      </div>
+                      <div className="pt-2 mt-2 border-t border-gray-200 text-xs text-gray-500">
+                        {selectedLocation.attribution}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Project Status */}
+                  <div className="bg-gradient-to-br from-eco-green-50 to-white rounded-lg shadow p-4 border border-eco-green-200">
+                    <h3 className="font-semibold text-gray-800 mb-3">Implementation Status</h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                        <span className="text-gray-700">Phase 2: Location Input ✓</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
+                        <span className="text-gray-700">Phase 3: Satellite Data</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-gray-300"></div>
+                        <span className="text-gray-700">Phase 4: NDVI Analysis</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-gray-300"></div>
+                        <span className="text-gray-700">Phase 5: U-Net Classification</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-gray-300"></div>
+                        <span className="text-gray-700">Phase 6: AI Integration</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          ) : (
+            // No Location Selected - Show Welcome State
+            <div className="max-w-4xl mx-auto">
+              <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+                <div className="w-16 h-16 bg-eco-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <MapPin className="w-8 h-8 text-eco-green-600" />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-800 mb-2">Select a Location to Begin</h2>
+                <p className="text-gray-600 mb-6">
+                  Choose a location from the quick options above or search for any place in Karnataka's Western Ghats region.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <h3 className="font-semibold text-gray-800 mb-2">✓ Currently Available</h3>
+                    <ul className="space-y-1 text-sm text-gray-700">
+                      <li>• Location search by name or PIN</li>
+                      <li>• Coordinate-based lookup</li>
+                      <li>• Interactive map visualization</li>
+                      <li>• Geocoding with Nominatim</li>
+                    </ul>
+                  </div>
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <h3 className="font-semibold text-gray-800 mb-2">⏳ Coming Soon</h3>
+                    <ul className="space-y-1 text-sm text-gray-700">
+                      <li>• Sentinel-2 satellite imagery</li>
+                      <li>• NDVI vegetation analysis</li>
+                      <li>• U-Net land cover classification</li>
+                      <li>• AI environmental insights</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
