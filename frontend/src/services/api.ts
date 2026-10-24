@@ -60,6 +60,35 @@ class ApiService {
   }
 
   // Phase 2 and beyond: Add analysis and other API methods here
+
+  // Phase 3: Satellite Data API
+  async getSatelliteStatus() {
+    const response = await this.backendClient.get('/api/v1/satellite/status');
+    return response.data;
+  }
+
+  async searchSatelliteProducts(
+    latitude: number,
+    longitude: number,
+    options?: {
+      startDate?: string;
+      endDate?: string;
+      maxCloudCover?: number;
+      limit?: number;
+    }
+  ) {
+    const response = await this.backendClient.post('/api/v1/satellite/search', {
+      latitude,
+      longitude,
+      ...options
+    });
+    return response.data;
+  }
+
+  async getSatelliteProduct(productId: string) {
+    const response = await this.backendClient.get(`/api/v1/satellite/product/${productId}`);
+    return response.data;
+  }
 }
 
 const apiService = new ApiService();

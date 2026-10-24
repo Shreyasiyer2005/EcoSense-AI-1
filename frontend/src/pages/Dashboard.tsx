@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import { Search, MapPin, Database } from 'lucide-react';
+import { Search, MapPin, Database, Satellite, Calendar, Cloud } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import apiService from '../services/api';
 import type { LocationResult } from '../types/location';
@@ -28,11 +28,24 @@ const quickLocations = [
   { name: 'Virajpet', pin: '571218', lat: 12.1967, lon: 75.8061 },
 ];
 
+interface SatelliteProduct {
+  id: string;
+  name: string;
+  acquisitionDate: string;
+  cloudCover: string | null;
+  platformName: string | null;
+  tileId: string | null;
+  online: boolean;
+}
+
 export default function Dashboard() {
   const [selectedLocation, setSelectedLocation] = useState<LocationResult | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [satelliteProducts, setSatelliteProducts] = useState<SatelliteProduct[]>([]);
+  const [satelliteLoading, setSatelliteLoading] = useState(false);
+  const [satelliteStatus, setSatelliteStatus] = useState<any>(null);
 
   const handleQuickLocation = async (location: typeof quickLocations[0]) => {
     setLoading(true);
@@ -44,6 +57,8 @@ export default function Dashboard() {
       });
       if (result.results && result.results.length > 0) {
         setSelectedLocation(result.results[0]);
+        // Automatically search for satellite data
+        searchSatelliteData(result.results[0]);
       }
     } catch (err) {
       setError('Failed to load location');
@@ -61,6 +76,8 @@ export default function Dashboard() {
       const result = await apiService.resolveLocation('place', searchQuery);
       if (result.results && result.results.length > 0) {
         setSelectedLocation(result.results[0]);
+        // Automatically search for satellite data
+        searchSatelliteData(result.results[0]);
       }
     } catch (err) {
       setError('Location not found');
@@ -68,6 +85,48 @@ export default function Dashboard() {
       setLoading(false);
     }
   };
+
+  const searchSatelliteData = async (location: LocationResult) => {
+    setSatelliteLoading(true);
+    setSatelliteProducts([]);
+    try {
+      // Search for last 90 days with max 20% cloud cover
+      const endDate = new Date().toISOString();
+      const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+      
+      const result = await apiService.searchSatelliteProducts(
+        location.latitude,
+        location.longitude,
+        {
+          startDate,
+          endDate,
+          maxCloudCover: 20,
+          limit: 10
+        }
+      );
+      
+      if (result.success && result.products) {
+        setSatelliteProducts(result.products);
+      }
+    } catch (err) {
+      console.error('Satellite search failed:', err);
+    } finally {
+      setSatelliteLoading(false);
+    }
+  };
+
+  // Check satellite service status on mount
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const status = await apiService.getSatelliteStatus();
+        setSatelliteStatus(status);
+      } catch (err) {
+        console.error('Failed to check satellite status');
+      }
+    };
+    checkStatus();
+  }, []);
 
   const mapCenter: [number, number] = selectedLocation
     ? [selectedLocation.latitude, selectedLocation.longitude]
@@ -198,6 +257,117 @@ export default function Dashboard() {
                           </Popup>
                         </Marker>
                       </MapContainer>
+                    </div>
+                  </div>
+
+                  {/* Satellite Products Section */}
+                  <div className="mt-6">
+                    <div className="bg-white rounded-lg shadow p-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+                          <Satellite className="w-5 h-5 text-eco-green-600" />
+                          Sentinel-2 Satellite Imagery
+                        </h3>
+                        {satelliteStatus?.configured && (
+                          <div className="flex items-center gap-1 text-xs text-green-600">
+                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                            Live Data
+                          </div>
+                        )}
+                      </div>
+
+                      {satelliteLoading && (
+                        <div className="text-center py-8">
+                          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-eco-green-600"></div>
+                          <p className="text-sm text-gray-600 mt-2">Searching Copernicus Data Space...</p>
+                        </div>
+                      )}
+
+                      {!satelliteLoading && !satelliteStatus?.configured && (
+                        <div className="text-center py-8 bg-yellow-50 rounded-lg border border-yellow-200">
+                          <Satellite className="w-12 h-12 text-yellow-600 mx-auto mb-3" />
+                          <p className="text-sm font-medium text-yellow-800 mb-2">Satellite Service Not Configured</p>
+                          <p className="text-xs text-yellow-700 mb-3">
+                            To access real Sentinel-2 imagery, configure Copernicus credentials
+                          </p>
+                          <a
+                            href="https://dataspace.copernicus.eu"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-yellow-800 underline hover:text-yellow-900"
+                          >
+                            Register for free access →
+                          </a>
+                        </div>
+                      )}
+
+                      {!satelliteLoading && satelliteStatus?.configured && satelliteProducts.length === 0 && (
+                        <div className="text-center py-8 bg-gray-50 rounded-lg">
+                          <Satellite className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                          <p className="text-sm text-gray-600">No recent imagery found</p>
+                          <p className="text-xs text-gray-500 mt-1">Try adjusting the date range or cloud cover filter</p>
+                        </div>
+                      )}
+
+                      {!satelliteLoading && satelliteProducts.length > 0 && (
+                        <div className="space-y-3">
+                          <p className="text-sm text-gray-600 mb-3">
+                            Found <strong>{satelliteProducts.length}</strong> Sentinel-2 L2A products (last 90 days, &lt;20% cloud)
+                          </p>
+                          <div className="max-h-96 overflow-y-auto space-y-2">
+                            {satelliteProducts.map((product, index) => (
+                              <div
+                                key={product.id}
+                                className="p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-eco-green-500 transition-colors"
+                              >
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <Calendar className="w-4 h-4 text-gray-500" />
+                                      <span className="text-sm font-medium text-gray-800">
+                                        {new Date(product.acquisitionDate).toLocaleDateString('en-US', {
+                                          year: 'numeric',
+                                          month: 'short',
+                                          day: 'numeric'
+                                        })}
+                                      </span>
+                                    </div>
+                                    {product.cloudCover && (
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <Cloud className="w-4 h-4 text-gray-500" />
+                                        <span className="text-xs text-gray-600">
+                                          {parseFloat(product.cloudCover).toFixed(1)}% cloud cover
+                                        </span>
+                                      </div>
+                                    )}
+                                    {product.tileId && (
+                                      <p className="text-xs text-gray-500 font-mono mt-1">
+                                        {product.tileId}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-col items-end gap-1">
+                                    {product.online && (
+                                      <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                                        Online
+                                      </span>
+                                    )}
+                                    {index === 0 && (
+                                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                        Most Recent
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
+                            <strong>Real data from Copernicus Data Space Ecosystem</strong><br />
+                            Satellite imagery display and processing will be added in future phases
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
