@@ -422,7 +422,11 @@ async function processNDVI(analysisId: string): Promise<void> {
     console.log(`[NDVI] Bands fetched: ${redBand.width}x${redBand.height} pixels`);
 
     // Step 3: Send to Python ML service for NDVI calculation
-    const mlServiceUrl = process.env.ML_SERVICE_URL || 'http://127.0.0.1:8000';
+    // Construct URL from host (for Render free tier public HTTPS communication)
+    const ML_SERVICE_HOST = process.env.ML_SERVICE_HOST || '127.0.0.1:8000';
+    const mlServiceUrl = ML_SERVICE_HOST.startsWith('127.0.0.1') || ML_SERVICE_HOST.startsWith('localhost')
+      ? `http://${ML_SERVICE_HOST}`
+      : `https://${ML_SERVICE_HOST}`;
 
     console.log(`[NDVI] Calculating NDVI via ML service`);
     const ndviResponse = await axios.post(`${mlServiceUrl}/ndvi/calculate`, {
@@ -608,7 +612,11 @@ async function processNDVIComparison(
     console.log(`[NDVI Compare] Bands fetched: ${width}x${height} pixels for both dates`);
 
     // Step 3: Send to ML service for comparison
-    const mlServiceUrl = process.env.ML_SERVICE_URL || 'http://127.0.0.1:8000';
+    // Construct URL from host (for Render free tier public HTTPS communication)
+    const ML_SERVICE_HOST = process.env.ML_SERVICE_HOST || '127.0.0.1:8000';
+    const mlServiceUrl = ML_SERVICE_HOST.startsWith('127.0.0.1') || ML_SERVICE_HOST.startsWith('localhost')
+      ? `http://${ML_SERVICE_HOST}`
+      : `https://${ML_SERVICE_HOST}`;
 
     console.log(`[NDVI Compare] Computing comparison via ML service...`);
     const mlStartTime = Date.now();

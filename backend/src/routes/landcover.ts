@@ -9,7 +9,11 @@ import axios from 'axios';
 
 const router = Router();
 
-const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://127.0.0.1:8000';
+// Construct ML service URL from host (for Render free tier public HTTPS communication)
+const ML_SERVICE_HOST = process.env.ML_SERVICE_HOST || '127.0.0.1:8000';
+const ML_SERVICE_URL = ML_SERVICE_HOST.startsWith('127.0.0.1') || ML_SERVICE_HOST.startsWith('localhost')
+  ? `http://${ML_SERVICE_HOST}`
+  : `https://${ML_SERVICE_HOST}`;
 
 /**
  * POST /api/v1/landcover/classify

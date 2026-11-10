@@ -18,6 +18,12 @@ interface HealthCheckResponse {
 }
 
 router.get('/', (req: Request, res: Response) => {
+  // Construct ML service URL from host (for Render free tier public HTTPS communication)
+  const ML_SERVICE_HOST = process.env.ML_SERVICE_HOST || '127.0.0.1:8000';
+  const mlServiceUrl = ML_SERVICE_HOST.startsWith('127.0.0.1') || ML_SERVICE_HOST.startsWith('localhost')
+    ? `http://${ML_SERVICE_HOST}`
+    : `https://${ML_SERVICE_HOST}`;
+
   const healthCheck: HealthCheckResponse = {
     status: 'ok',
     service: 'ecosense-ai-backend',
@@ -27,7 +33,7 @@ router.get('/', (req: Request, res: Response) => {
     version: '1.0.0-phase1',
     services: {
       database: process.env.DATABASE_URL ? 'configured' : 'not configured',
-      mlService: process.env.ML_SERVICE_URL || 'http://127.0.0.1:8000',
+      mlService: mlServiceUrl,
       satelliteProvider: process.env.COPERNICUS_CLIENT_ID ? 'configured' : 'not configured',
       llmProvider: process.env.LLM_PROVIDER || 'fallback'
     }
