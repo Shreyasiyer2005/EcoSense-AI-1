@@ -45,10 +45,7 @@ services:
       - key: COPERNICUS_CLIENT_SECRET
         sync: false  # Set in Render dashboard - from Sentinel Hub
       - key: ML_SERVICE_URL
-        fromService:
-          type: web
-          name: ecosense-ml-service
-          property: url
+        value: http://ecosense-ml-service:8000
       - key: ALLOWED_ORIGINS
         sync: false  # Set to frontend URL
       - key: OLLAMA_BASE_URL
