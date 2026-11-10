@@ -51,9 +51,9 @@ const tests = [
     check: (response) => response.status === 200
   },
   {
-    name: 'Cesium Workers directory exists',
-    url: `${SITE_URL}cesium/Workers/`,
-    check: (response) => response.status === 200 || response.status === 403
+    name: 'Cesium Workers are accessible',
+    url: `${SITE_URL}cesium/Workers/ArcType-26a3f38d.js`,
+    check: (response) => response.status === 200
   },
   {
     name: 'CESIUM_BASE_URL is configured',
