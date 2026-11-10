@@ -8,40 +8,13 @@
  * - Location markers
  * - User-configured Cesium Ion token (environment variable)
  * - Graceful fallback for imagery/terrain authentication failures
+ * - Safe error handling to prevent blank screen
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Viewer, Entity } from 'resium';
-import {
-  Cartesian3,
-  Color,
-  defined,
-  Ion,
-  Math as CesiumMath,
-  ScreenSpaceEventHandler,
-  ScreenSpaceEventType,
-  Viewer as CesiumViewer,
-  createWorldTerrainAsync,
-  HeightReference,
-  VerticalOrigin,
-  IonImageryProvider,
-  TerrainProvider,
-  SingleTileImageryProvider,
-  Rectangle,
-  ImageryLayer
-} from 'cesium';
 
 // Configure Cesium Ion token from environment variable
 const CESIUM_ION_TOKEN = import.meta.env.VITE_CESIUM_ION_TOKEN?.trim();
-
-if (CESIUM_ION_TOKEN && CESIUM_ION_TOKEN !== 'YOUR_TOKEN_HERE') {
-  Ion.defaultAccessToken = CESIUM_ION_TOKEN;
-  console.log('[CesiumGlobe] Using user-configured Cesium Ion token');
-} else {
-  console.warn('[CesiumGlobe] No valid Cesium Ion token configured. Terrain and premium imagery will not be available.');
-  console.warn('[CesiumGlobe] To enable: Add your token to frontend/.env as VITE_CESIUM_ION_TOKEN');
-  console.warn('[CesiumGlobe] Get a free token at: https://ion.cesium.com/tokens');
-}
 
 interface MonitoringZone {
   name: string;
@@ -73,15 +46,64 @@ export function CesiumGlobe({
   onOverlayLoad,
   onOverlayError
 }: CesiumGlobeProps) {
-  const viewerRef = useRef<CesiumViewer | null>(null);
+  const viewerRef = useRef<any>(null);
   const [terrainReady, setTerrainReady] = useState(false);
   const [terrainError, setTerrainError] = useState<string | null>(null);
   const [imageryError, setImageryError] = useState<string | null>(null);
+  const [cesiumLoaded, setCesiumLoaded] = useState(false);
+  const [cesiumError, setCesiumError] = useState<string | null>(null);
 
   // Phase 8D.5: NDVI overlay state
-  const [overlayLayer, setOverlayLayer] = useState<ImageryLayer | null>(null);
+  const [overlayLayer, setOverlayLayer] = useState<any>(null);
   const [overlayLoading, setOverlayLoading] = useState(false);
   const overlayBlobUrlRef = useRef<string | null>(null);
+
+  // Cesium modules refs
+  const cesiumRef = useRef<any>(null);
+  const resiumRef = useRef<any>(null);
+
+  // Load Cesium dynamically
+  useEffect(() => {
+    let mounted = true;
+
+    const loadCesium = async () => {
+      try {
+        console.log('[CesiumGlobe] Loading Cesium modules...');
+        
+        const [resium, cesium] = await Promise.all([
+          import('resium'),
+          import('cesium')
+        ]);
+
+        if (!mounted) return;
+
+        cesiumRef.current = cesium;
+        resiumRef.current = resium;
+
+        // Configure Ion token
+        if (CESIUM_ION_TOKEN && CESIUM_ION_TOKEN !== 'YOUR_TOKEN_HERE') {
+          cesium.Ion.defaultAccessToken = CESIUM_ION_TOKEN;
+          console.log('[CesiumGlobe] Using user-configured Cesium Ion token');
+        } else {
+          console.warn('[CesiumGlobe] No valid Cesium Ion token configured.');
+        }
+
+        setCesiumLoaded(true);
+        console.log('[CesiumGlobe] Cesium modules loaded successfully');
+      } catch (error: any) {
+        console.error('[CesiumGlobe] Failed to load Cesium:', error);
+        if (mounted) {
+          setCesiumError(error.message || 'Failed to load 3D globe library');
+        }
+      }
+    };
+
+    loadCesium();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   /**
    * Load NDVI change overlay from backend
@@ -89,7 +111,9 @@ export function CesiumGlobe({
    */
   const loadOverlay = async (analysisId: string) => {
     const viewer = viewerRef.current;
-    if (!viewer) return;
+    if (!viewer || !cesiumRef.current) return;
+
+    const { Rectangle, SingleTileImageryProvider } = cesiumRef.current;
 
     // Remove existing overlay first
     removeOverlay();
@@ -138,7 +162,6 @@ export function CesiumGlobe({
       const blob = await response.blob();
 
       // Convert blob to data URL (base64) for better Cesium compatibility
-      // Blob URLs may have CORS issues with some imagery providers
       const reader = new FileReader();
       const imageUrl = await new Promise<string>((resolve, reject) => {
         reader.onloadend = () => resolve(reader.result as string);
@@ -151,8 +174,6 @@ export function CesiumGlobe({
       const rectangle = Rectangle.fromDegrees(west, south, east, north);
 
       // Create SingleTileImageryProvider
-      // Note: tileWidth and tileHeight are required in Cesium 1.108.0
-      // Use 256x256 as standard single-tile dimensions (Cesium will scale to fit rectangle)
       const provider = new SingleTileImageryProvider({
         url: imageUrl,
         rectangle: rectangle,
@@ -160,21 +181,15 @@ export function CesiumGlobe({
         tileHeight: 256
       });
 
-      // Check if provider indicates alpha channel support
-      console.log(`[CesiumGlobe] Provider hasAlphaChannel: ${provider.hasAlphaChannel}`);
-
       // Add imagery provider to the globe
       const layer = viewer.imageryLayers.addImageryProvider(provider);
-      layer.alpha = 1.0; // Full opacity to ensure visibility
+      layer.alpha = 1.0;
       layer.show = overlayVisible;
 
       setOverlayLayer(layer);
       setOverlayLoading(false);
 
       console.log(`[CesiumGlobe] NDVI overlay loaded successfully`);
-      console.log(`[CesiumGlobe] Layer alpha: ${layer.alpha}, show: ${layer.show}`);
-      console.log(`[CesiumGlobe] Imagery layers count: ${viewer.imageryLayers.length}`);
-      console.log(`[CesiumGlobe] Overlay layer index: ${viewer.imageryLayers.indexOf(layer)}`);
 
       // Fly camera to overlay bounds for visibility
       viewer.camera.flyTo({
@@ -194,7 +209,6 @@ export function CesiumGlobe({
         onOverlayError(error.message || 'Failed to load overlay');
       }
 
-      // Clear data URL reference
       overlayBlobUrlRef.current = null;
     }
   };
@@ -211,9 +225,7 @@ export function CesiumGlobe({
       console.log('[CesiumGlobe] NDVI overlay removed');
     }
 
-    // Clear data URL reference (data URLs don't need explicit revocation)
     overlayBlobUrlRef.current = null;
-
     setOverlayLayer(null);
 
     if (onOverlayLoad) {
@@ -221,12 +233,12 @@ export function CesiumGlobe({
     }
   };
 
-  // Initialize viewer with proper imagery and terrain ONLY when viewer is ready
+  // Initialize viewer with proper imagery and terrain
   useEffect(() => {
     const viewer = viewerRef.current;
-    if (!viewer) return;
+    if (!viewer || !cesiumLoaded || !cesiumRef.current) return;
 
-    // Flag to prevent state updates after unmount
+    const { createWorldTerrainAsync, IonImageryProvider } = cesiumRef.current;
     let isMounted = true;
 
     // Configure terrain if token is available
@@ -235,29 +247,23 @@ export function CesiumGlobe({
         requestWaterMask: true,
         requestVertexNormals: true
       })
-        .then((terrainProvider: TerrainProvider) => {
+        .then((terrainProvider: any) => {
           if (!isMounted || !viewerRef.current) return;
           viewerRef.current.scene.terrainProvider = terrainProvider;
           console.log('[CesiumGlobe] Terrain loaded successfully');
           setTerrainReady(true);
           setTerrainError(null);
         })
-        .catch((error) => {
+        .catch((error: any) => {
           if (!isMounted) return;
           console.warn('[CesiumGlobe] Terrain loading failed:', error.message || error);
-          if (error.message && error.message.includes('401')) {
-            setTerrainError('Terrain authentication failed. Check your Cesium Ion token.');
-          } else {
-            setTerrainError('Terrain unavailable. Using basic globe.');
-          }
-          setTerrainReady(true); // Continue without terrain
+          setTerrainError('Terrain unavailable. Using basic globe.');
+          setTerrainReady(true);
         });
 
-      // Explicitly ensure imagery provider is active
       IonImageryProvider.fromAssetId(2, {})
-        .then((imageryProvider) => {
+        .then((imageryProvider: any) => {
           if (!isMounted || !viewerRef.current) return;
-          // Replace the base imagery layer with authenticated Bing Maps
           if (viewerRef.current.imageryLayers.length > 0) {
             viewerRef.current.imageryLayers.remove(viewerRef.current.imageryLayers.get(0));
             viewerRef.current.imageryLayers.addImageryProvider(imageryProvider, 0);
@@ -265,36 +271,31 @@ export function CesiumGlobe({
           }
           setImageryError(null);
         })
-        .catch((error) => {
+        .catch((error: any) => {
           if (!isMounted) return;
           console.warn('[CesiumGlobe] Imagery provider initialization failed:', error.message || error);
-          setImageryError('Using fallback imagery. Bing Maps unavailable.');
+          setImageryError('Using fallback imagery.');
         });
     } else {
       console.log('[CesiumGlobe] No token configured, using default imagery and terrain');
       setTerrainReady(true);
     }
 
-    // Cleanup function
     return () => {
       isMounted = false;
     };
-  }, [viewerRef.current]); // Re-run when viewer becomes available
+  }, [viewerRef.current, cesiumLoaded]);
 
-  // Navigate to Coorg region on mount - ONLY ONCE
+  // Navigate to Coorg region on mount
   useEffect(() => {
     const viewer = viewerRef.current;
-    if (!viewer || !terrainReady) return;
+    if (!viewer || !terrainReady || !cesiumRef.current) return;
 
+    const { Cartesian3, Math: CesiumMath } = cesiumRef.current;
     const camera = viewer.camera;
 
-    // Set initial view to Coorg region center
     camera.setView({
-      destination: Cartesian3.fromDegrees(
-        75.7380, // Coorg longitude center
-        12.3375, // Coorg latitude center
-        150000 // 150km altitude for regional view (closer than before)
-      ),
+      destination: Cartesian3.fromDegrees(75.7380, 12.3375, 150000),
       orientation: {
         heading: CesiumMath.toRadians(0),
         pitch: CesiumMath.toRadians(-45),
@@ -303,21 +304,21 @@ export function CesiumGlobe({
     });
 
     console.log('[CesiumGlobe] Initial camera set to Coorg region');
-  }, [terrainReady]); // Only run once when terrain is ready
+  }, [terrainReady]);
 
-  // Navigate to location when selected - separate effect
+  // Navigate to location when selected
   useEffect(() => {
     const viewer = viewerRef.current;
-    if (!viewer || !selectedLocation || !terrainReady) return;
+    if (!viewer || !selectedLocation || !terrainReady || !cesiumRef.current) return;
 
+    const { Cartesian3, Math: CesiumMath } = cesiumRef.current;
     const camera = viewer.camera;
 
-    // Fly to selected location with smooth animation
     camera.flyTo({
       destination: Cartesian3.fromDegrees(
         selectedLocation.longitude,
         selectedLocation.latitude,
-        15000 // 15km altitude for detailed view
+        15000
       ),
       duration: 2,
       orientation: {
@@ -333,8 +334,9 @@ export function CesiumGlobe({
   // Handle entity clicks for monitoring zones
   useEffect(() => {
     const viewer = viewerRef.current;
-    if (!viewer || !viewer.scene || !onLocationClick) return;
+    if (!viewer || !viewer.scene || !onLocationClick || !cesiumRef.current) return;
 
+    const { ScreenSpaceEventHandler, ScreenSpaceEventType, defined } = cesiumRef.current;
     const handler = new ScreenSpaceEventHandler(viewer.scene.canvas);
 
     handler.setInputAction((movement: any) => {
@@ -344,20 +346,18 @@ export function CesiumGlobe({
         const entity = pickedObject.id;
         const entityName = entity.name;
 
-        // Find the matching monitoring zone
         const zone = monitoringZones.find(z => z.name === entityName);
         if (zone) {
-          console.log('[CesiumGlobe] Marker clicked:', zone.name, 'Coordinates:', zone.latitude, zone.longitude);
+          console.log('[CesiumGlobe] Marker clicked:', zone.name);
           onLocationClick(zone);
         }
       }
     }, ScreenSpaceEventType.LEFT_CLICK);
 
-    // Cleanup handler on unmount
     return () => {
       handler.destroy();
     };
-  }, [viewerRef.current, monitoringZones, onLocationClick]);
+  }, [viewerRef.current, monitoringZones, onLocationClick, cesiumLoaded]);
 
   // Phase 8D.5: Load overlay when comparisonId changes
   useEffect(() => {
@@ -370,7 +370,6 @@ export function CesiumGlobe({
       removeOverlay();
     }
 
-    // Cleanup on unmount or comparisonId change
     return () => {
       removeOverlay();
     };
@@ -383,19 +382,62 @@ export function CesiumGlobe({
     }
   }, [overlayVisible, overlayLayer]);
 
+  // If Cesium failed to load, show fallback UI
+  if (cesiumError) {
+    return (
+      <div className="relative w-full h-full flex items-center justify-center bg-[#0f1419]">
+        <div className="max-w-md text-center p-6">
+          <div className="text-6xl mb-4">🌍</div>
+          <h3 className="text-xl font-bold text-white mb-2">3D Globe Unavailable</h3>
+          <p className="text-gray-400 mb-4">
+            The Cesium 3D globe library failed to load. This may be due to network issues or browser compatibility.
+          </p>
+          <p className="text-sm text-gray-500 mb-4">
+            Error: {cesiumError}
+          </p>
+          <p className="text-sm text-gray-500 mb-4">
+            Please try refreshing the page or use the Explore page for 2D map visualization.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+          >
+            Reload Page
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading state while Cesium loads
+  if (!cesiumLoaded || !resiumRef.current) {
+    return (
+      <div className="relative w-full h-full flex items-center justify-center bg-[#0f1419]">
+        <div className="bg-[#1a2332] border border-gray-700 rounded-lg p-4 shadow-xl">
+          <div className="flex items-center gap-3">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-green-500"></div>
+            <span className="text-sm text-white font-medium">Loading 3D Globe...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const { Viewer, Entity } = resiumRef.current;
+  const { Cartesian3, Color, HeightReference, VerticalOrigin } = cesiumRef.current;
+
   return (
     <div className="relative w-full h-full">
       <Viewer
-        ref={(viewer) => {
+        ref={(viewer: any) => {
           if (viewer?.cesiumElement) {
             viewerRef.current = viewer.cesiumElement;
           }
         }}
         style={{ width: '100%', height: '100%' }}
-        // Viewer configuration
         animation={false}
         timeline={false}
-        baseLayerPicker={false} // Disable to prevent accidental imagery removal
+        baseLayerPicker={false}
         geocoder={false}
         homeButton={true}
         sceneModePicker={true}
@@ -403,10 +445,8 @@ export function CesiumGlobe({
         navigationInstructionsInitiallyVisible={false}
         selectionIndicator={true}
         infoBox={true}
-        // Performance optimizations
         requestRenderMode={true}
         maximumRenderTimeChange={Infinity}
-        // Ensure imagery is always visible
         shouldAnimate={true}
       >
         {/* Monitoring Zone Markers */}
@@ -431,11 +471,7 @@ export function CesiumGlobe({
                   ${isSelected ? '<p style="margin: 8px 0 0 0; font-size: 12px; color: #3b82f6; font-weight: 600;">✓ SELECTED LOCATION</p>' : '<p style="margin: 8px 0 0 0; font-size: 12px; color: #666;">Click to analyze this location</p>'}
                 </div>
               `}
-              position={Cartesian3.fromDegrees(
-                zone.longitude,
-                zone.latitude,
-                0
-              )}
+              position={Cartesian3.fromDegrees(zone.longitude, zone.latitude, 0)}
               point={{
                 pixelSize: isSelected ? 16 : 12,
                 color: Color.fromCssColorString(isSelected ? '#3b82f6' : '#16a34a'),
@@ -449,7 +485,7 @@ export function CesiumGlobe({
                 fillColor: Color.WHITE,
                 outlineColor: Color.BLACK,
                 outlineWidth: 2,
-                style: 0, // FILL_AND_OUTLINE
+                style: 0,
                 verticalOrigin: VerticalOrigin.BOTTOM,
                 pixelOffset: {
                   x: 0,

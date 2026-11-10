@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { Component, ErrorInfo, ReactNode } from 'react';
 import TopNav from './components/Layout/TopNav';
 import Home from './pages/Home';
 import MainDashboard from './pages/MainDashboard';
@@ -7,6 +8,57 @@ import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import About from './pages/About';
 import { AssistantPanel } from './components/AssistantPanel';
+
+// Error Boundary to catch and display errors gracefully
+class ErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Application Error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#0f1419] flex items-center justify-center p-8">
+          <div className="max-w-2xl w-full bg-red-950/20 border border-red-800/50 rounded-lg p-6">
+            <h1 className="text-2xl font-bold text-red-400 mb-4">
+              ⚠️ Application Error
+            </h1>
+            <p className="text-gray-300 mb-4">
+              An error occurred while loading the application.
+            </p>
+            {this.state.error && (
+              <div className="bg-black/40 rounded p-4 mb-4">
+                <p className="text-sm text-red-300 font-mono">
+                  {this.state.error.message}
+                </p>
+              </div>
+            )}
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+            >
+              Reload Application
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 function AppContent() {
   return (
@@ -36,12 +88,14 @@ function AppContent() {
 
 function App() {
   return (
-    <BrowserRouter basename="/EcoSense-AI-1" future={{
-      v7_startTransition: true,
-      v7_relativeSplatPath: true
-    }}>
-      <AppContent />
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter basename="/EcoSense-AI-1" future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true
+      }}>
+        <AppContent />
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 
