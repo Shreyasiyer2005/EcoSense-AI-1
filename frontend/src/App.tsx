@@ -36,7 +36,7 @@ function AppContent() {
 
 function App() {
   return (
-    <BrowserRouter future={{
+    <BrowserRouter basename="/EcoSense-AI-1" future={{
       v7_startTransition: true,
       v7_relativeSplatPath: true
     }}>
