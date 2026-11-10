@@ -17,3 +17,64 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+
+/* CesiumJS Globe Styles */
+.cesium-viewer {
+  width: 100%;
+  height: 100%;
+}
+
+.cesium-viewer-bottom {
+  display: none; /* Hide Cesium credits bar - using custom attribution */
+}
+
+.cesium-widget-credits {
+  display: none !important;
+}
+
+/* Dark theme for environmental dashboard */
+.bg-eco-dark-900 {
+  background-color: #0a0f1a;
+}
+
+.bg-eco-dark-800 {
+  background-color: #111827;
+}
+
+.border-eco-dark-700 {
+  border-color: #1f2937;
+}
+
+.text-eco-green-400 {
+  color: #4ade80;
+}
+
+.bg-eco-green-900 {
+  background-color: #14532d;
+}
+
+/* Cesium Navigation Controls - Move down to avoid search bar overlap */
+.cesium-viewer-toolbar {
+  top: 70px !important; /* Move below search bar */
+}
+
+.cesium-button {
+  background-color: rgba(26, 35, 50, 0.9) !important;
+  border: 1px solid rgba(55, 65, 81, 0.5) !important;
+}
+
+.cesium-button:hover {
+  background-color: rgba(31, 41, 55, 0.95) !important;
+}
+
+/* Ensure Cesium controls don't overlap search */
+.cesium-viewer .cesium-viewer-toolbar {
+  z-index: 30 !important;
+}
+
+/* Fix attribution position */
+.cesium-credit-logoContainer {
+  bottom: 8px !important;
+  right: 8px !important;
+}

@@ -1,0 +1,79 @@
+# Render Blueprint for EcoSense AI
+# Deploy all services with: render blueprint deploy
+
+services:
+  # Frontend - Static Site
+  - type: web
+    name: ecosense-frontend
+    runtime: static
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: ./frontend/dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        sync: false  # Set in Render dashboard
+      - key: VITE_ML_SERVICE_URL
+        sync: false  # Set in Render dashboard
+      - key: VITE_CESIUM_ION_TOKEN
+        sync: false  # Optional
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: SAMEORIGIN
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+
+  # Backend API - Node.js
+  - type: web
+    name: ecosense-backend
+    runtime: node
+    region: oregon  # or your preferred region
+    plan: starter  # or free
+    buildCommand: cd backend && npm install && npm run build
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: COPERNICUS_CLIENT_ID
+        sync: false  # Set in Render dashboard - from Sentinel Hub
+      - key: COPERNICUS_CLIENT_SECRET
+        sync: false  # Set in Render dashboard - from Sentinel Hub
+      - key: ML_SERVICE_URL
+        fromService:
+          type: web
+          name: ecosense-ml-service
+          property: url
+      - key: ALLOWED_ORIGINS
+        sync: false  # Set to frontend URL
+      - key: OLLAMA_BASE_URL
+        value: ""  # Leave empty if Ollama not deployed
+      - key: LLM_PROVIDER
+        value: fallback
+    healthCheckPath: /health
+    autoDeploy: true
+
+  # ML Service - Python
+  - type: web
+    name: ecosense-ml-service
+    runtime: python
+    region: oregon  # or your preferred region
+    plan: starter  # or free
+    buildCommand: cd ml-service && pip install -r requirements.txt
+    startCommand: cd ml-service && python main.py
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: PORT
+        value: 8000
+      - key: MODEL_DEVICE
+        value: cpu
+      - key: ALLOWED_ORIGINS
+        sync: false  # Set to backend URL + frontend URL
+    healthCheckPath: /health
+    autoDeploy: true

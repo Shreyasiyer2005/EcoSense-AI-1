@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import { Search, MapPin, Database, Satellite, Calendar, Cloud } from 'lucide-react';
-import 'leaflet/dist/leaflet.css';
+// Leaflet imports kept for rollback - currently not rendered
+// import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+// import 'leaflet/dist/leaflet.css';
+// import L from 'leaflet';
+import { Search, MapPin, Database, Satellite, Calendar, Cloud, Globe, Loader } from 'lucide-react';
 import apiService from '../services/api';
 import type { LocationResult } from '../types/location';
+import NDVIAnalysis from '../components/NDVIAnalysis';
+import CesiumGlobe from '../components/CesiumGlobe';
+import OverlayLegend from '../components/OverlayLegend';
 
-// Fix for default marker icons in react-leaflet
-import L from 'leaflet';
-
-// Use CDN URLs for marker icons
+/* Leaflet icon configuration - kept for rollback
 const DefaultIcon = L.icon({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -20,12 +22,15 @@ const DefaultIcon = L.icon({
 });
 
 L.Marker.prototype.options.icon = DefaultIcon;
+*/
 
+// Five official Coorg monitoring zones
 const quickLocations = [
-  { name: 'Coorg', pin: '571201', lat: 12.3375, lon: 75.7380 },
   { name: 'Madikeri', pin: '571201', lat: 12.4214, lon: 75.7387 },
-  { name: 'Somwarpet', pin: '571236', lat: 12.5969, lon: 75.8433 },
   { name: 'Virajpet', pin: '571218', lat: 12.1967, lon: 75.8061 },
+  { name: 'Somwarpet', pin: '571236', lat: 12.5969, lon: 75.8433 },
+  { name: 'Kushalnagar', pin: '571234', lat: 12.4599, lon: 75.9594 },
+  { name: 'Gonikoppal', pin: '571213', lat: 12.1833, lon: 75.9276 },
 ];
 
 interface SatelliteProduct {
@@ -47,19 +52,37 @@ export default function Dashboard() {
   const [satelliteLoading, setSatelliteLoading] = useState(false);
   const [satelliteStatus, setSatelliteStatus] = useState<any>(null);
 
+  // Phase 8D.5: NDVI overlay state
+  const [activeComparisonId, setActiveComparisonId] = useState<string | null>(null);
+  const [overlayVisible, setOverlayVisible] = useState(true);
+  const [overlayLoaded, setOverlayLoaded] = useState(false);
+  const [overlayError, setOverlayError] = useState<string | null>(null);
+
   const handleQuickLocation = async (location: typeof quickLocations[0]) => {
     setLoading(true);
     setError(null);
+
+    // Phase 8D.5: Clear overlay when changing locations
+    setActiveComparisonId(null);
+    setOverlayLoaded(false);
+    setOverlayError(null);
+
     try {
-      const result = await apiService.resolveLocation('coordinates', {
+      // Use known monitoring zone data directly - do NOT reverse geocode
+      const locationResult: LocationResult = {
+        id: Date.now(), // Unique ID for this selection
+        name: location.name,
         latitude: location.lat,
-        longitude: location.lon
-      });
-      if (result.results && result.results.length > 0) {
-        setSelectedLocation(result.results[0]);
-        // Automatically search for satellite data
-        searchSatelliteData(result.results[0]);
-      }
+        longitude: location.lon,
+        state: 'Karnataka',
+        country: 'India',
+        type: 'monitoring_zone',
+        source: 'coorg_zones',
+        attribution: 'EcoSense AI Monitoring Network'
+      };
+      setSelectedLocation(locationResult);
+      // Automatically search for satellite data
+      searchSatelliteData(locationResult);
     } catch (err) {
       setError('Failed to load location');
     } finally {
@@ -69,7 +92,7 @@ export default function Dashboard() {
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
-    
+
     setLoading(true);
     setError(null);
     try {
@@ -88,12 +111,17 @@ export default function Dashboard() {
 
   const searchSatelliteData = async (location: LocationResult) => {
     setSatelliteLoading(true);
-    setSatelliteProducts([]);
+    setSatelliteProducts([]); // Clear previous results
+    setError(null); // Clear previous errors
+
     try {
       // Search for last 90 days with max 20% cloud cover
       const endDate = new Date().toISOString();
       const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-      
+
+      console.log('[Dashboard] Starting satellite search for:', location.name,
+        `(${location.latitude.toFixed(4)}°N, ${location.longitude.toFixed(4)}°E)`);
+
       const result = await apiService.searchSatelliteProducts(
         location.latitude,
         location.longitude,
@@ -104,12 +132,49 @@ export default function Dashboard() {
           limit: 10
         }
       );
-      
+
+      console.log('[Dashboard] Satellite search response:', {
+        success: result.success,
+        count: result.count || result.products?.length || 0,
+        message: result.message
+      });
+
       if (result.success && result.products) {
         setSatelliteProducts(result.products);
+        console.log(`[Dashboard] Set ${result.products.length} products in state`);
+      } else {
+        console.warn('[Dashboard] Search succeeded but no products:', result.message);
+        setError(result.message || 'No satellite products found');
       }
-    } catch (err) {
-      console.error('Satellite search failed:', err);
+    } catch (err: any) {
+      console.error('[Dashboard] Satellite search failed:', err);
+
+      // Extract detailed error information
+      const errorDetails = {
+        message: err.message || 'Unknown error',
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        data: err.response?.data,
+        timeout: err.code === 'ECONNABORTED' || err.message?.includes('timeout')
+      };
+
+      console.error('[Dashboard] Error details:', errorDetails);
+
+      // Set user-friendly error message
+      let errorMessage = 'Failed to search satellite products';
+      if (errorDetails.timeout) {
+        errorMessage = 'Satellite search timed out. The service may be slow. Please try again.';
+      } else if (errorDetails.status === 401) {
+        errorMessage = 'Authentication failed. Check Copernicus credentials.';
+      } else if (errorDetails.status === 429) {
+        errorMessage = 'Rate limit exceeded. Please wait and try again.';
+      } else if (errorDetails.data?.message) {
+        errorMessage = errorDetails.data.message;
+      } else if (errorDetails.message) {
+        errorMessage = errorDetails.message;
+      }
+
+      setError(errorMessage);
     } finally {
       setSatelliteLoading(false);
     }
@@ -128,16 +193,16 @@ export default function Dashboard() {
     checkStatus();
   }, []);
 
-  const mapCenter: [number, number] = selectedLocation
-    ? [selectedLocation.latitude, selectedLocation.longitude]
-    : [12.3375, 75.7380]; // Default to Coorg
-
-  const mapZoom = selectedLocation ? 13 : 10;
+  // Remove unused variables
+  // const mapCenter: [number, number] = selectedLocation
+  //   ? [selectedLocation.latitude, selectedLocation.longitude]
+  //   : [12.3375, 75.7380]; // Default to Coorg
+  // const mapZoom = selectedLocation ? 13 : 10;
 
   return (
-    <div className="ml-64">
+    <div className="">
       {/* Hero Section with Forest Background */}
-      <div 
+      <div
         className="relative bg-cover bg-center h-[400px] flex items-center"
         style={{
           backgroundImage: `linear-gradient(rgba(15, 23, 42, 0.75), rgba(22, 101, 52, 0.6)), url('https://images.unsplash.com/photo-1441974231531-c6227db76b6e?q=80&w=2560&auto=format&fit=crop')`,
@@ -204,7 +269,7 @@ export default function Dashboard() {
       {/* Main Content */}
       <div className="bg-gray-50 px-6 py-6">
         <div className="max-w-7xl mx-auto">
-          
+
           {selectedLocation ? (
             // Location Selected - Show Analysis Dashboard
             <div className="space-y-6">
@@ -228,8 +293,75 @@ export default function Dashboard() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Left Column - Map */}
+                {/* Left Column - 3D Globe */}
                 <div className="lg:col-span-2">
+                  <div className="bg-eco-dark-900 rounded-lg shadow-2xl overflow-hidden border border-eco-dark-700">
+                    <div className="px-4 py-3 border-b border-eco-dark-700 bg-eco-dark-800">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Globe className="w-5 h-5 text-eco-green-400" />
+                          <h3 className="font-semibold text-white">Interactive 3D Earth</h3>
+                        </div>
+                        <span className="text-xs text-eco-green-400 bg-eco-green-900 bg-opacity-30 px-2 py-1 rounded">
+                          ⚡ CesiumJS
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">Global satellite monitoring • Five Coorg zones marked</p>
+                    </div>
+                    <div className="relative h-[600px] bg-eco-dark-900">
+                      <CesiumGlobe
+                        selectedLocation={selectedLocation ? {
+                          name: selectedLocation.name,
+                          latitude: selectedLocation.latitude,
+                          longitude: selectedLocation.longitude
+                        } : undefined}
+                        monitoringZones={quickLocations.map(loc => ({
+                          name: loc.name,
+                          latitude: loc.lat,
+                          longitude: loc.lon,
+                          pin: loc.pin
+                        }))}
+                        onLocationClick={(zone) => {
+                          handleQuickLocation(quickLocations.find(l => l.name === zone.name)!);
+                        }}
+                        comparisonId={activeComparisonId}
+                        overlayVisible={overlayVisible}
+                        onOverlayLoad={setOverlayLoaded}
+                        onOverlayError={setOverlayError}
+                      />
+
+                      {/* Phase 8D.5: NDVI Overlay Legend */}
+                      {overlayLoaded && (
+                        <div className="absolute bottom-4 right-4">
+                          <OverlayLegend
+                            visible={overlayVisible}
+                            onVisibilityToggle={() => setOverlayVisible(!overlayVisible)}
+                          />
+                        </div>
+                      )}
+
+                      {/* Phase 8D.5: Overlay Error Notification */}
+                      {overlayError && (
+                        <div className="absolute top-4 left-4 right-4 bg-red-50 border border-red-200 rounded-lg p-3 shadow-lg">
+                          <div className="flex items-start gap-2">
+                            <span className="text-red-600">❌</span>
+                            <div>
+                              <p className="text-sm font-medium text-red-800">Overlay Load Failed</p>
+                              <p className="text-xs text-red-700 mt-1">{overlayError}</p>
+                              <button
+                                onClick={() => setOverlayError(null)}
+                                className="text-xs text-red-600 hover:text-red-800 mt-2 underline"
+                              >
+                                Dismiss
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Leaflet fallback - kept commented for rollback
                   <div className="bg-white rounded-lg shadow overflow-hidden">
                     <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
                       <h3 className="font-semibold text-gray-800">Location Map</h3>
@@ -259,6 +391,7 @@ export default function Dashboard() {
                       </MapContainer>
                     </div>
                   </div>
+                  */}
 
                   {/* Satellite Products Section */}
                   <div className="mt-6">
@@ -301,11 +434,24 @@ export default function Dashboard() {
                         </div>
                       )}
 
+                      {satelliteLoading && (
+                        <div className="text-center py-8">
+                          <Loader className="w-12 h-12 text-eco-green-600 mx-auto mb-3 animate-spin" />
+                          <p className="text-sm font-medium text-gray-800 mb-1">Searching Copernicus Data Space...</p>
+                          <p className="text-xs text-gray-600">This may take up to 30 seconds</p>
+                        </div>
+                      )}
+
                       {!satelliteLoading && satelliteStatus?.configured && satelliteProducts.length === 0 && (
                         <div className="text-center py-8 bg-gray-50 rounded-lg">
                           <Satellite className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                           <p className="text-sm text-gray-600">No recent imagery found</p>
-                          <p className="text-xs text-gray-500 mt-1">Try adjusting the date range or cloud cover filter</p>
+                          <p className="text-xs text-gray-500 mt-1">Try selecting a different location or check back later</p>
+                          {error && (
+                            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded text-xs text-red-800">
+                              <strong>Error:</strong> {error}
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -373,51 +519,44 @@ export default function Dashboard() {
 
                   {/* Environmental Data Cards */}
                   <div className="grid grid-cols-2 gap-4 mt-6">
-                    <div className="bg-white rounded-lg shadow p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="font-semibold text-gray-800">NDVI Analysis</h3>
-                        <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
-                      </div>
-                      <div className="text-center py-8">
-                        <div className="text-4xl mb-2">📡</div>
-                        <p className="text-sm text-gray-600">Satellite data required</p>
-                        <p className="text-xs text-gray-500 mt-1">Will be available in Phase 3+</p>
-                      </div>
+                    <div className="bg-white rounded-lg shadow p-4 col-span-2">
+                      <NDVIAnalysis
+                        satelliteProducts={satelliteProducts}
+                        locationName={selectedLocation.name}
+                        bbox={{
+                          west: selectedLocation.longitude - 0.005,
+                          south: selectedLocation.latitude - 0.005,
+                          east: selectedLocation.longitude + 0.005,
+                          north: selectedLocation.latitude + 0.005
+                        }}
+                        onComparisonComplete={(comparisonId) => {
+                          setActiveComparisonId(comparisonId);
+                          setOverlayError(null);
+                        }}
+                      />
                     </div>
 
                     <div className="bg-white rounded-lg shadow p-4">
                       <div className="flex items-center justify-between mb-3">
-                        <h3 className="font-semibold text-gray-800">Land Cover</h3>
-                        <div className="w-3 h-3 rounded-full bg-blue-400"></div>
+                        <h3 className="font-semibold text-gray-800">Land Cover Classification</h3>
+                        <div className="w-3 h-3 rounded-full bg-gray-400"></div>
                       </div>
                       <div className="text-center py-8">
                         <div className="text-4xl mb-2">🗺️</div>
-                        <p className="text-sm text-gray-600">U-Net model not trained</p>
-                        <p className="text-xs text-gray-500 mt-1">Will be available in Phase 5</p>
+                        <p className="text-sm text-gray-600 font-medium">Not Implemented</p>
+                        <p className="text-xs text-gray-500 mt-1">U-Net model training required</p>
                       </div>
                     </div>
 
                     <div className="bg-white rounded-lg shadow p-4">
                       <div className="flex items-center justify-between mb-3">
-                        <h3 className="font-semibold text-gray-800">Vegetation Change</h3>
-                        <div className="w-3 h-3 rounded-full bg-green-400"></div>
+                        <h3 className="font-semibold text-gray-800">Multi-Temporal Change</h3>
+                        <div className="w-3 h-3 rounded-full bg-gray-400"></div>
                       </div>
                       <div className="text-center py-8">
                         <div className="text-4xl mb-2">🌲</div>
-                        <p className="text-sm text-gray-600">Historical data required</p>
-                        <p className="text-xs text-gray-500 mt-1">Will be available in Phase 4</p>
-                      </div>
-                    </div>
-
-                    <div className="bg-white rounded-lg shadow p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="font-semibold text-gray-800">Environmental Risk</h3>
-                        <div className="w-3 h-3 rounded-full bg-red-400"></div>
-                      </div>
-                      <div className="text-center py-8">
-                        <div className="text-4xl mb-2">⚠️</div>
-                        <p className="text-sm text-gray-600">Analysis not available</p>
-                        <p className="text-xs text-gray-500 mt-1">Will be available in Phase 6</p>
+                        <p className="text-sm text-gray-600 font-medium">Not Implemented</p>
+                        <p className="text-xs text-gray-500 mt-1">Time series analysis required</p>
                       </div>
                     </div>
                   </div>
@@ -430,23 +569,33 @@ export default function Dashboard() {
                     <div className="px-4 py-3 bg-gradient-to-r from-eco-green-600 to-eco-green-700 text-white">
                       <h3 className="font-semibold flex items-center gap-2">
                         <span>🤖</span>
-                        AI Environmental Assistant
+                        Local AI Environmental Assistant
                       </h3>
                     </div>
                     <div className="p-4">
                       <p className="text-sm text-gray-600 mb-4">
-                        AI-powered insights will analyze vegetation health, detect changes, and suggest conservation actions.
+                        Conversational AI assistant powered by local Ollama integration. Ask questions about NDVI results, vegetation health, or environmental monitoring.
                       </p>
                       <div className="space-y-2 mb-4">
                         <div className="p-3 bg-gray-50 rounded text-sm text-gray-600">
-                          <span className="font-medium">Example:</span> "What vegetation changes occurred in the last 6 months?"
+                          <span className="font-medium">Example:</span> "Explain this NDVI value and what it means for vegetation"
                         </div>
                         <div className="p-3 bg-gray-50 rounded text-sm text-gray-600">
-                          <span className="font-medium">Example:</span> "Suggest conservation priorities for this area"
+                          <span className="font-medium">Example:</span> "What factors affect vegetation health in this region?"
                         </div>
                       </div>
-                      <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
-                        <strong>Phase 6:</strong> LLM integration planned with Gemini/GPT-4
+                      <div className="p-3 bg-green-50 border border-green-200 rounded text-sm">
+                        <div className="flex items-start gap-2">
+                          <span className="text-green-600 text-lg">✓</span>
+                          <div className="flex-1">
+                            <p className="font-semibold text-green-900 mb-1">Active Integration</p>
+                            <p className="text-green-800 text-xs">
+                              <strong>Model:</strong> qwen2.5:3b (Ollama)<br/>
+                              <strong>Features:</strong> NDVI interpretation, environmental Q&A<br/>
+                              <strong>Cost:</strong> ₹0 (local inference)
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -484,23 +633,31 @@ export default function Dashboard() {
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                        <span className="text-gray-700">Phase 2: Location Input ✓</span>
+                        <span className="text-gray-700">Location Input ✓</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
-                        <span className="text-gray-700">Phase 3: Satellite Data</span>
+                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                        <span className="text-gray-700">Satellite Data Search ✓</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                        <span className="text-gray-700">NDVI Analysis ✓</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                        <span className="text-gray-700">Historical Comparison ✓</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                        <span className="text-gray-700">AI Assistant (Ollama) ✓</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                        <span className="text-gray-700">3D Globe Visualization ✓</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-gray-300"></div>
-                        <span className="text-gray-700">Phase 4: NDVI Analysis</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-gray-300"></div>
-                        <span className="text-gray-700">Phase 5: U-Net Classification</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-gray-300"></div>
-                        <span className="text-gray-700">Phase 6: AI Integration</span>
+                        <span className="text-gray-700">U-Net Land Cover (Not Trained)</span>
                       </div>
                     </div>
                   </div>
@@ -508,34 +665,68 @@ export default function Dashboard() {
               </div>
             </div>
           ) : (
-            // No Location Selected - Show Welcome State
-            <div className="max-w-4xl mx-auto">
-              <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-                <div className="w-16 h-16 bg-eco-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <MapPin className="w-8 h-8 text-eco-green-600" />
-                </div>
-                <h2 className="text-2xl font-bold text-gray-800 mb-2">Select a Location to Begin</h2>
-                <p className="text-gray-600 mb-6">
-                  Choose a location from the quick options above or search for any place in Karnataka's Western Ghats region.
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <h3 className="font-semibold text-gray-800 mb-2">✓ Currently Available</h3>
-                    <ul className="space-y-1 text-sm text-gray-700">
-                      <li>• Location search by name or PIN</li>
-                      <li>• Coordinate-based lookup</li>
-                      <li>• Interactive map visualization</li>
-                      <li>• Geocoding with Nominatim</li>
-                    </ul>
+            // No Location Selected - Show Interactive Globe
+            <div className="space-y-6">
+              <div className="bg-eco-dark-900 rounded-lg shadow-2xl overflow-hidden border border-eco-dark-700">
+                <div className="px-4 py-3 border-b border-eco-dark-700 bg-eco-dark-800">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Globe className="w-5 h-5 text-eco-green-400" />
+                      <h3 className="font-semibold text-white">Interactive 3D Earth - Coorg Region</h3>
+                    </div>
+                    <span className="text-xs text-eco-green-400 bg-eco-green-900 bg-opacity-30 px-2 py-1 rounded">
+                      ⚡ CesiumJS
+                    </span>
                   </div>
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <h3 className="font-semibold text-gray-800 mb-2">⏳ Coming Soon</h3>
-                    <ul className="space-y-1 text-sm text-gray-700">
-                      <li>• Sentinel-2 satellite imagery</li>
-                      <li>• NDVI vegetation analysis</li>
-                      <li>• U-Net land cover classification</li>
-                      <li>• AI environmental insights</li>
-                    </ul>
+                  <p className="text-xs text-gray-400 mt-1">Explore the five monitoring zones in Karnataka's Western Ghats</p>
+                </div>
+                <div className="relative h-[700px] bg-eco-dark-900">
+                  <CesiumGlobe
+                    selectedLocation={undefined}
+                    monitoringZones={quickLocations.map(loc => ({
+                      name: loc.name,
+                      latitude: loc.lat,
+                      longitude: loc.lon,
+                      pin: loc.pin
+                    }))}
+                    onLocationClick={(zone) => {
+                      handleQuickLocation(quickLocations.find(l => l.name === zone.name)!);
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="max-w-4xl mx-auto">
+                <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+                  <div className="w-16 h-16 bg-eco-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <MapPin className="w-8 h-8 text-eco-green-600" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-gray-800 mb-2">Select a Location to Begin Analysis</h2>
+                  <p className="text-gray-600 mb-6">
+                    Click a green marker on the 3D globe above, use the quick options at the top, or search for any location in Karnataka's Western Ghats region.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <h3 className="font-semibold text-gray-800 mb-2">✓ Currently Available</h3>
+                      <ul className="space-y-1 text-sm text-gray-700">
+                        <li>• Interactive 3D Earth visualization</li>
+                        <li>• Five Coorg monitoring zones</li>
+                        <li>• Location search by name or PIN</li>
+                        <li>• Sentinel-2 satellite imagery search</li>
+                        <li>• Real NDVI vegetation analysis</li>
+                        <li>• AI environmental assistant</li>
+                      </ul>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <h3 className="font-semibold text-gray-800 mb-2">⏳ Coming Soon</h3>
+                      <ul className="space-y-1 text-sm text-gray-700">
+                        <li>• Satellite imagery overlay on globe</li>
+                        <li>• NDVI heatmap visualization</li>
+                        <li>• Temporal change detection maps</li>
+                        <li>• Global location search</li>
+                        <li>• Environmental stress predictions</li>
+                      </ul>
+                    </div>
                   </div>
                 </div>
               </div>

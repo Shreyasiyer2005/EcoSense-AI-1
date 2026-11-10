@@ -15,7 +15,7 @@ load_dotenv()
 # Add app directory to path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'app'))
 
-from app.routes import health
+from app.routes import health, ndvi, land_cover
 
 app = FastAPI(
     title="EcoSense AI ML Service",
@@ -36,6 +36,8 @@ app.add_middleware(
 
 # Register routes
 app.include_router(health.router, tags=["health"])
+app.include_router(ndvi.router, tags=["ndvi"])
+app.include_router(land_cover.router, prefix="/api/v1", tags=["land-cover"])
 
 @app.get("/")
 async def root():
@@ -45,18 +47,23 @@ async def root():
         "version": "1.0.0-phase1",
         "endpoints": {
             "health": "/health",
-            "ndvi": "/api/v1/ndvi (Phase 4)",
-            "land_cover": "/api/v1/land-cover (Phase 5)"
+            "ndvi": "/api/v1/ndvi",
+            "land_cover": "/api/v1/land-cover (rule-based spectral classification)"
         }
     }
 
+
 if __name__ == "__main__":
     import uvicorn
+
     port = int(os.getenv("PORT", 8000))
+
+    print(f"Starting EcoSense AI ML Service on port {port}")
+
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
         port=port,
-        reload=True,
+        reload=False,
         log_level="info"
     )

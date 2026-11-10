@@ -5,8 +5,26 @@
 
 import express from 'express';
 import { satelliteService } from '../services/satellite';
+import { sentinelHubService } from '../services/sentinelHub';
 
 const router = express.Router();
+
+// Add OPTIONS handler for CORS preflight requests
+router.options('/rgb-image', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.status(200).end();
+});
+
+router.options('/image/:productId', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.status(200).end();
+});
 
 /**
  * GET /api/v1/satellite/status
@@ -15,11 +33,11 @@ const router = express.Router();
 router.get('/status', async (req, res) => {
   try {
     const configured = satelliteService.isConfigured();
-    
+
     res.json({
       success: true,
       configured,
-      message: configured 
+      message: configured
         ? 'Copernicus Data Space credentials configured'
         : 'Copernicus credentials not configured. Set COPERNICUS_CLIENT_ID and COPERNICUS_CLIENT_SECRET',
       provider: 'Copernicus Data Space Ecosystem',
@@ -39,7 +57,7 @@ router.get('/status', async (req, res) => {
 /**
  * POST /api/v1/satellite/search
  * Search for Sentinel-2 products for a given location and date range
- * 
+ *
  * Body:
  * {
  *   latitude: number,
@@ -152,3 +170,147 @@ router.get('/product/:id', async (req, res) => {
 });
 
 export default router;
+
+/**
+ * GET /api/v1/satellite/rgb-image
+ * Get true-color RGB satellite image for comparison
+ * Query params: productId, date, west, south, east, north, width, height
+ */
+router.get('/rgb-image', async (req, res) => {
+  try {
+    const { productId, date, west, south, east, north, width, height } = req.query;
+
+    // Validation
+    if (!productId || !date || !west || !south || !east || !north) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required parameters: productId, date, west, south, east, north'
+      });
+    }
+
+    const bbox = {
+      west: parseFloat(west as string),
+      south: parseFloat(south as string),
+      east: parseFloat(east as string),
+      north: parseFloat(north as string),
+      crs: 'EPSG:4326'
+    };
+
+    // Use explicit dimensions if provided, otherwise let sentinelHub calculate from 10m resolution
+    const imageWidth = width ? parseInt(width as string) : undefined;
+    const imageHeight = height ? parseInt(height as string) : undefined;
+
+    console.log('[Satellite RGB] Fetching image:', {
+      productId,
+      date,
+      bbox,
+      dimensions: `${imageWidth}x${imageHeight}`
+    });
+
+    // Get true-color image from Sentinel Hub
+    const imageBuffer = await sentinelHubService.getTrueColorImage({
+      bbox,
+      productId: productId as string,
+      acquisitionDate: date as string,
+      width: imageWidth,
+      height: imageHeight
+    });
+
+    // Set CORS headers explicitly for image responses
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+    res.setHeader('X-Acquisition-Date', date as string);
+    res.setHeader('X-Product-Id', productId as string);
+    res.send(imageBuffer);
+
+  } catch (error: any) {
+    console.error('[Satellite RGB] Image fetch failed:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch RGB satellite image',
+      error: error.message
+    });
+  }
+});
+
+
+/**
+ * GET /api/v1/satellite/image/:productId
+ * Get true-color satellite image as PNG
+ */
+router.get('/image/:productId', async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { bbox } = req.query;
+
+    if (!bbox) {
+      return res.status(400).json({
+        success: false,
+        message: 'bbox query parameter required (format: west,south,east,north)'
+      });
+    }
+
+    // Parse bbox
+    const bboxParts = (bbox as string).split(',').map(parseFloat);
+    if (bboxParts.length !== 4 || bboxParts.some(isNaN)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid bbox format. Expected: west,south,east,north'
+      });
+    }
+
+    const [west, south, east, north] = bboxParts;
+
+    // Fetch product details to get the actual product name and acquisition date
+    const product = await satelliteService.getProduct(productId);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+
+    // Extract acquisition date from product
+    const acquisitionDate = product.ContentDate.Start.split('T')[0]; // Get YYYY-MM-DD
+
+    console.log('[Satellite Image] Fetching image for:', {
+      productId,
+      productName: product.Name,
+      acquisitionDate,
+      bbox: [west, south, east, north]
+    });
+
+    // Get true-color image from Sentinel Hub
+    const imageBuffer = await sentinelHubService.getTrueColorImage({
+      bbox: { west, south, east, north, crs: 'EPSG:4326' },
+      productId,
+      acquisitionDate,
+      width: 512,
+      height: 512
+    });
+
+    // Set CORS headers explicitly for image responses
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+    res.setHeader('X-Acquisition-Date', acquisitionDate);
+    res.setHeader('X-Product-Id', productId);
+    res.send(imageBuffer);
+
+  } catch (error: any) {
+    console.error('[Satellite] Image fetch failed:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch satellite image',
+      error: error.message
+    });
+  }
+});

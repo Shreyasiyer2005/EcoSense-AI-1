@@ -1,9 +1,9 @@
 /**
  * Copernicus Data Space Ecosystem - Sentinel-2 Satellite Data Service
- * 
+ *
  * Integrates with the Copernicus Data Space Ecosystem to search and retrieve
  * Sentinel-2 Level-2A (L2A) satellite imagery and metadata.
- * 
+ *
  * Free tier: No cost for data access. Requires free account registration.
  * Rate limits: OAuth token requests limited. Reuse tokens within validity period.
  */
@@ -58,7 +58,7 @@ interface SearchResult {
 
 /**
  * Copernicus Data Space Satellite Service
- * 
+ *
  * Handles OAuth2 authentication and satellite data retrieval from
  * the Copernicus Data Space Ecosystem.
  */
@@ -67,18 +67,16 @@ class CopernicusSatelliteService {
   private catalogClient: AxiosInstance;
   private accessToken: string | null = null;
   private tokenExpiry: Date | null = null;
-  private clientId: string;
-  private clientSecret: string;
-  
+  private clientId: string = '';
+  private clientSecret: string = '';
+  private initialized: boolean = false;
+
   private readonly TOKEN_URL = 'https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token';
   private readonly CATALOG_URL = 'https://catalogue.dataspace.copernicus.eu/odata/v1';
 
   constructor() {
-    this.clientId = process.env.COPERNICUS_CLIENT_ID || '';
-    this.clientSecret = process.env.COPERNICUS_CLIENT_SECRET || '';
-
     this.client = axios.create({
-      timeout: 30000,
+      timeout: 60000, // 60 seconds for OAuth token requests
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
       }
@@ -86,7 +84,7 @@ class CopernicusSatelliteService {
 
     this.catalogClient = axios.create({
       baseURL: this.CATALOG_URL,
-      timeout: 30000,
+      timeout: 90000, // 90 seconds for catalog searches (can be slow)
       headers: {
         'Accept': 'application/json'
       }
@@ -94,16 +92,38 @@ class CopernicusSatelliteService {
   }
 
   /**
+   * Lazy initialization - load credentials on first use
+   */
+  private ensureInitialized(): void {
+    if (this.initialized) return;
+
+    this.clientId = process.env.COPERNICUS_CLIENT_ID || '';
+    this.clientSecret = process.env.COPERNICUS_CLIENT_SECRET || '';
+    this.initialized = true;
+
+    // Debug log (development only, no secrets)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Copernicus] Service initialized (lazy)');
+      console.log('[Copernicus] CLIENT_ID from env:', this.clientId ? `present (${this.clientId.length} chars)` : 'MISSING');
+      console.log('[Copernicus] CLIENT_SECRET from env:', this.clientSecret ? `present (${this.clientSecret.length} chars)` : 'MISSING');
+    }
+  }
+
+  /**
    * Check if credentials are configured
    */
   isConfigured(): boolean {
+    this.ensureInitialized();
     return Boolean(this.clientId && this.clientSecret);
   }
 
   /**
    * Get OAuth2 access token (or reuse cached token if valid)
+   * Includes retry logic for network issues
    */
   private async getAccessToken(): Promise<string> {
+    this.ensureInitialized();
+
     // Reuse token if still valid (with 60 second buffer)
     if (this.accessToken && this.tokenExpiry) {
       const now = new Date();
@@ -117,28 +137,51 @@ class CopernicusSatelliteService {
       throw new Error('Copernicus credentials not configured. Set COPERNICUS_CLIENT_ID and COPERNICUS_CLIENT_SECRET in .env');
     }
 
-    try {
-      const params = new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: this.clientId,
-        client_secret: this.clientSecret
-      });
+    // Retry logic for token requests
+    const maxRetries = 3;
+    let lastError: Error | null = null;
 
-      const response = await this.client.post<OAuthTokenResponse>(
-        this.TOKEN_URL,
-        params.toString()
-      );
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[Copernicus] Requesting access token (attempt ${attempt}/${maxRetries})...`);
 
-      this.accessToken = response.data.access_token;
-      const expiresIn = response.data.expires_in || 600; // Default 10 minutes
-      this.tokenExpiry = new Date(Date.now() + expiresIn * 1000);
+        const params = new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: this.clientId,
+          client_secret: this.clientSecret
+        });
 
-      console.log(`[Copernicus] Access token obtained, expires in ${expiresIn}s`);
-      return this.accessToken;
-    } catch (error: any) {
-      console.error('[Copernicus] Token fetch failed:', error.message);
-      throw new Error('Failed to authenticate with Copernicus Data Space');
+        const response = await this.client.post<OAuthTokenResponse>(
+          this.TOKEN_URL,
+          params.toString()
+        );
+
+        this.accessToken = response.data.access_token;
+        const expiresIn = response.data.expires_in || 600; // Default 10 minutes
+        this.tokenExpiry = new Date(Date.now() + expiresIn * 1000);
+
+        console.log(`[Copernicus] Access token obtained, expires in ${expiresIn}s`);
+        return this.accessToken;
+
+      } catch (error: any) {
+        lastError = error;
+        console.error(`[Copernicus] Token fetch attempt ${attempt} failed:`, error.message);
+
+        // Don't retry on authentication errors (401, 403)
+        if (error.response?.status === 401 || error.response?.status === 403) {
+          throw new Error('Authentication failed. Invalid Copernicus credentials.');
+        }
+
+        // Wait before retry (exponential backoff)
+        if (attempt < maxRetries) {
+          const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // Max 5 seconds
+          console.log(`[Copernicus] Waiting ${waitTime}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+      }
     }
+
+    throw new Error(`Failed to authenticate with Copernicus Data Space after ${maxRetries} attempts: ${lastError?.message}`);
   }
 
   /**
@@ -151,12 +194,15 @@ class CopernicusSatelliteService {
     filters.push("Collection/Name eq 'SENTINEL-2'");
     filters.push("contains(Name,'L2A')"); // Level-2A products
 
-    // Date range filter
+    // Date range filter - Use proper ISO 8601 format
     if (options.startDate) {
-      filters.push(`ContentDate/Start ge ${options.startDate}`);
+      // Ensure ISO format and use proper OData date-time format
+      const startISO = new Date(options.startDate).toISOString();
+      filters.push(`ContentDate/Start ge ${startISO}`);
     }
     if (options.endDate) {
-      filters.push(`ContentDate/Start le ${options.endDate}`);
+      const endISO = new Date(options.endDate).toISOString();
+      filters.push(`ContentDate/Start le ${endISO}`);
     }
 
     // Geographic filter (point or bbox)
@@ -182,6 +228,8 @@ class CopernicusSatelliteService {
    * Search for Sentinel-2 L2A products
    */
   async searchProducts(options: SearchOptions): Promise<SearchResult> {
+    this.ensureInitialized();
+
     if (!this.isConfigured()) {
       return {
         success: false,
@@ -193,7 +241,7 @@ class CopernicusSatelliteService {
 
     try {
       const token = await this.getAccessToken();
-      
+
       const filter = this.buildSearchQuery(options);
       const top = options.limit || 20;
       const orderby = 'ContentDate/Start desc'; // Most recent first
@@ -236,7 +284,7 @@ class CopernicusSatelliteService {
         success: true,
         products: filteredProducts,
         count: filteredProducts.length,
-        message: filteredProducts.length > 0 
+        message: filteredProducts.length > 0
           ? `Found ${filteredProducts.length} Sentinel-2 L2A products`
           : 'No products found for the specified criteria',
         query: filter
@@ -244,7 +292,25 @@ class CopernicusSatelliteService {
 
     } catch (error: any) {
       console.error('[Copernicus] Search failed:', error.message);
-      
+
+      if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
+        return {
+          success: false,
+          products: [],
+          count: 0,
+          message: 'Connection timeout. The Copernicus Data Space service is slow or unreachable. Please try again.'
+        };
+      }
+
+      if (error.code === 'ECONNREFUSED') {
+        return {
+          success: false,
+          products: [],
+          count: 0,
+          message: 'Cannot connect to Copernicus Data Space. Service may be down.'
+        };
+      }
+
       if (error.response?.status === 401) {
         return {
           success: false,
@@ -263,11 +329,20 @@ class CopernicusSatelliteService {
         };
       }
 
+      if (error.response?.status === 503) {
+        return {
+          success: false,
+          products: [],
+          count: 0,
+          message: 'Copernicus Data Space service temporarily unavailable. Please try again later.'
+        };
+      }
+
       return {
         success: false,
         products: [],
         count: 0,
-        message: `Search failed: ${error.message}`
+        message: `Search failed: ${error.message}. This may be due to network issues or service availability.`
       };
     }
   }
@@ -276,6 +351,8 @@ class CopernicusSatelliteService {
    * Get product metadata by ID
    */
   async getProduct(productId: string): Promise<Sentinel2Product | null> {
+    this.ensureInitialized();
+
     if (!this.isConfigured()) {
       throw new Error('Copernicus credentials not configured');
     }
@@ -304,7 +381,7 @@ class CopernicusSatelliteService {
    */
   extractMetadata(product: Sentinel2Product) {
     const attributes = product.Attributes || [];
-    
+
     const findAttr = (names: string[]) => {
       for (const name of names) {
         const attr = attributes.find(a => a.Name === name);

@@ -14,9 +14,11 @@ pip-delete-this-directory.txt
 
 # Environment variables
 .env
-.env.local
-.env.production
-.env.development
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
 
 # Build outputs
 dist/
@@ -51,6 +53,9 @@ data/temp/
 *.pkl
 *.pickle
 
+# Generated overlays (NDVI change maps)
+backend/overlays/
+
 # OS specific
 Thumbs.db
 desktop.ini
@@ -71,3 +76,33 @@ htmlcov/
 # Misc
 .temp/
 tmp/
+
+# Test files and scripts (development only)
+test-*.ts
+test-*.js
+test-*.mjs
+test-*.py
+test-*.png
+test-*.json
+verify-*.py
+verify-*.ts
+check-*.py
+check-*.js
+backend/analyze-png.py
+
+# Temporary project reports (keep in docs/ if needed)
+TASK-*.md
+DASHBOARD-*.md
+IMPLEMENTATION-*.md
+RUNTIME-*.md
+VERIFICATION-*.md
+QUICK-START.md
+START_BACKEND.md
+
+# Browser testing artifacts
+frontend/browser-*.mjs
+frontend/browser-*.txt
+frontend/browser-*.md
+frontend/check-*.js
+frontend/comprehensive-*.mjs
+frontend/test-*.html
