@@ -1,45 +1,20 @@
 # Render Blueprint for EcoSense AI
-# Deploy all services with: render blueprint deploy
+# Backend + ML Service only — Frontend is on GitHub Pages
 #
-# FREE TIER CONFIGURATION:
-# - All services use Render's free web service tier
-# - Free services cannot use private networking (internal DNS)
-# - Services communicate via public HTTPS URLs (*.onrender.com)
-# - Free services spin down after 15 minutes of inactivity
+# FREE TIER NOTES:
+# - Free web services spin down after 15 min inactivity (cold start ~30s)
+# - No credit card required
+# - Services communicate via public HTTPS (*.onrender.com)
+#
+# DEPLOY:
+# 1. Go to https://dashboard.render.com/blueprints
+# 2. Click "New Blueprint Instance"
+# 3. Connect the GitHub repo Shreyasiyer2005/EcoSense-AI-1
+# 4. Render will detect this file and create both services
+# 5. Add COPERNICUS_CLIENT_ID and COPERNICUS_CLIENT_SECRET manually in each service's dashboard
 
 services:
-  # Frontend - Static Site (always free)
-  - type: web
-    name: ecosense-frontend
-    runtime: static
-    buildCommand: cd frontend && npm install && npm run build
-    staticPublishPath: ./frontend/dist
-    envVars:
-      - key: VITE_API_BASE_URL
-        fromService:
-          name: ecosense-backend
-          type: web
-          envVarKey: RENDER_EXTERNAL_URL
-      - key: VITE_ML_SERVICE_URL
-        fromService:
-          name: ecosense-ml-service
-          type: web
-          envVarKey: RENDER_EXTERNAL_URL
-      - key: VITE_CESIUM_ION_TOKEN
-        value: ""
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
-    headers:
-      - path: /*
-        name: X-Frame-Options
-        value: SAMEORIGIN
-      - path: /*
-        name: X-Content-Type-Options
-        value: nosniff
-
-  # Backend API - Node.js (free tier)
+  # Backend API - Node.js
   - type: web
     name: ecosense-backend
     runtime: node
@@ -50,24 +25,24 @@ services:
       - key: NODE_ENV
         value: production
       - key: COPERNICUS_CLIENT_ID
-        sync: false  # Set in Render dashboard - from Sentinel Hub
+        sync: false
       - key: COPERNICUS_CLIENT_SECRET
-        sync: false  # Set in Render dashboard - from Sentinel Hub
+        sync: false
       - key: ML_SERVICE_HOST
         fromService:
           name: ecosense-ml-service
           type: web
           envVarKey: RENDER_EXTERNAL_HOSTNAME
       - key: ALLOWED_ORIGINS
-        sync: false  # Set to frontend URL (e.g., https://ecosense-frontend.onrender.com)
-      - key: OLLAMA_BASE_URL
-        value: ""  # Leave empty - Ollama not deployed
+        value: https://shreyasiyer2005.github.io
       - key: LLM_PROVIDER
         value: fallback
+      - key: JWT_SECRET
+        generateValue: true
     healthCheckPath: /health
     autoDeploy: true
 
-  # ML Service - Python (free tier)
+  # ML Service - Python FastAPI
   - type: web
     name: ecosense-ml-service
     runtime: python
@@ -77,9 +52,9 @@ services:
     envVars:
       - key: ENVIRONMENT
         value: production
-      - key: MODEL_DEVICE
-        value: cpu
       - key: ALLOWED_ORIGINS
-        sync: false  # Set to backend + frontend URLs (comma-separated)
+        value: https://shreyasiyer2005.github.io,https://ecosense-backend.onrender.com
+      - key: PORT
+        value: 8000
     healthCheckPath: /health
     autoDeploy: true

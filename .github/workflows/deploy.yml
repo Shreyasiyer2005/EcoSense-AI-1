@@ -39,6 +39,8 @@ jobs:
         env:
           VITE_BASE_PATH: /EcoSense-AI-1/
           VITE_CESIUM_ION_TOKEN: ${{ secrets.VITE_CESIUM_ION_TOKEN || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IlI0Y29VbHNjQmMxakNHV0oiLCJqdGkiOiJkMGM1YTg4YS1mZjllLTRiMTYtOTQ5ZS0xYjM5MGM5NDZkMWYiLCJpZCI6NTQwOTc2LCJzdWIiOiJFY29TZW5zZVNocmV5YXMiLCJpc3MiOiJodHRwczovL2FwaS5jZXNpdW0uY29tIiwiYXVkIjoiRWNvU2Vuc2VTaHJleWFzX2RlZmF1bHQiLCJpYXQiOjE3OTM2MjUyOTV9.nsFW_v5a5Es_I5BWGzBgb1pg3FKtMTpXOzRSuLN3oXo' }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || 'https://ecosense-backend.onrender.com' }}
+          VITE_ML_SERVICE_URL: ${{ secrets.VITE_ML_SERVICE_URL || 'https://ecosense-ml-service.onrender.com' }}
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
